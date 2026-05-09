@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-chime",
   "description": "A scheduled message plugin that supports different broadcast timing strategies for different groups and is natively compatible with multi-bot-controller.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -32,7 +32,7 @@
   "koishi": {
     "description": {
       "en": "A scheduled message plugin that supports different broadcast timing strategies for different groups and is natively compatible with multi-bot-controller.",
-      "zh": "一款用于定时发送消息的插件，可对不同群聊配置不同广播定时策略，原生兼容multi-bot-controller插件。"
+      "zh": "一款用于定时发送消息的广播插件，可对不同群聊配置不同广播定时策略，原生兼容multi-bot-controller插件。"
     }
   }
 }
