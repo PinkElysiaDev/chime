@@ -1,5 +1,10 @@
 import { Schema } from 'koishi'
-import type { AntiBanConfig, BroadcastConfig, Config as ChimeConfig } from './types'
+import type {
+  AntiBanConfig,
+  BroadcastConfig,
+  BroadcastTargetConfig,
+  Config as ChimeConfig,
+} from './types'
 
 const DEFAULT_TEMPLATE = `大家好！现在是 {time}，这是一条定时广播消息。`
 
@@ -21,6 +26,24 @@ const antiBanSchema: Schema<AntiBanConfig> = Schema.object({
     .description('发送间隔随机抖动百分比，例如 50 表示 ±50%'),
 })
 
+const broadcastTargetSchema: Schema<BroadcastTargetConfig> = Schema.object({
+  platform: Schema.string()
+    .required()
+    .description('Bot 平台名称，例如 onebot'),
+  botId: Schema.string()
+    .required()
+    .description('Bot 账号 ID'),
+  type: Schema.union([
+    Schema.const('guild' as const).description('群聊'),
+    Schema.const('private' as const).description('私聊'),
+  ])
+    .default('guild')
+    .description('发送目标类型'),
+  id: Schema.string()
+    .required()
+    .description('目标群聊/私聊 ID'),
+})
+
 const broadcastSchema: Schema<BroadcastConfig> = Schema.object({
   enabled: Schema.boolean()
     .default(true)
@@ -31,20 +54,18 @@ const broadcastSchema: Schema<BroadcastConfig> = Schema.object({
   cronExpression: Schema.string()
     .required()
     .description('Cron 表达式，例如 "30 7 * * *" 表示每天 7:30'),
-  platform: Schema.string()
-    .required()
-    .description('Bot 平台名称，例如 onebot'),
-  botId: Schema.string()
-    .required()
-    .description('Bot 账号 ID'),
-  destinations: Schema.array(Schema.string())
+  targets: Schema.array(broadcastTargetSchema)
     .role('table')
     .default([])
-    .description('发送目标群/频道 ID 列表'),
+    .description(
+      '广播发送范围。每一行表示一个 Bot 向一个群聊或私聊目标发送消息。',
+    ),
   template: Schema.string()
     .role('textarea')
     .default(DEFAULT_TEMPLATE)
-    .description('消息模板，支持变量：{time} {date} {bot_id} {bot_platform} {bot_self_id} {group_id}，支持 <at id="..."></at> 标签'),
+    .description(
+      '消息模板，支持变量：{time} {date} {bot_id} {bot_platform} {bot_self_id} {target_id} {target_type} {group_id} {private_id}，支持 <at id="..."></at> 标签',
+    ),
 })
 
 export const ConfigSchema: Schema<ChimeConfig> = Schema.intersect([

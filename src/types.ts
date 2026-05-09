@@ -4,13 +4,18 @@ export interface AntiBanConfig {
   jitterPercent: number
 }
 
+export interface BroadcastTargetConfig {
+  platform: string
+  botId: string
+  type: 'guild' | 'private'
+  id: string
+}
+
 export interface BroadcastConfig {
   enabled: boolean
   name: string
   cronExpression: string
-  platform: string
-  botId: string
-  destinations: string[]
+  targets: BroadcastTargetConfig[]
   template: string
 }
 
@@ -27,5 +32,8 @@ export interface TemplateContext {
   bot_id: string
   bot_platform: string
   bot_self_id: string
+  target_id: string
+  target_type: string
   group_id: string
+  private_id: string
 }
