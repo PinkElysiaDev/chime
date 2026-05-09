@@ -1,4 +1,4 @@
-import { Context } from 'koishi'
+import { Bot, Context } from 'koishi'
 import {} from 'koishi-plugin-cron'
 import { Config, name } from './config'
 import type {
@@ -9,7 +9,6 @@ import type {
 } from './types'
 import { renderTemplate } from './template'
 import { PreparedBroadcastTarget, sendToTargets } from './sender'
-import { getBotId } from './utils'
 
 export { Config, name } from './config'
 export * from './types'
@@ -34,15 +33,10 @@ export const usage = `
 
 ## 变量与标签说明
 
-- \`{time}\` - 当前时间（完整日期时间）
+- \`{time}\` - 当前时间，仅包含小时和分钟
 - \`{date}\` - 当前日期
-- \`{bot_id}\` - Bot 标识（platform:selfId）
-- \`{bot_platform}\` - Bot 平台名称
-- \`{bot_self_id}\` - Bot 账号 ID
-- \`{target_id}\` - 当前发送目标 ID
-- \`{target_type}\` - 当前发送目标类型（guild/private）
-- \`{group_id}\` - 当前群聊目标 ID，仅群聊时有值
-- \`{private_id}\` - 当前私聊目标 ID，仅私聊时有值
+- \`{target_id}\` - 当前发送目标 ID，群聊时为群 ID，私聊时为用户 ID
+- \`{target_name}\` - 当前发送目标名称，群聊时为群名，私聊时为用户昵称/用户名
 - \`<at id="123456789"></at>\` - @ 指定用户
 
 ## Cron 表达式示例
@@ -143,7 +137,7 @@ export function apply(ctx: Context, config: ChimeConfig) {
         continue
       }
 
-      const templateContext = buildTemplateContext(now, target)
+      const templateContext = await buildTemplateContext(bot, now, target)
       const message = renderTemplate(broadcast.template, templateContext)
 
       verboseLog(
@@ -174,19 +168,42 @@ export function apply(ctx: Context, config: ChimeConfig) {
   }
 }
 
-function buildTemplateContext(
+async function buildTemplateContext(
+  bot: Bot,
   now: Date,
   target: BroadcastTargetConfig,
-): TemplateContext {
+): Promise<TemplateContext> {
   return {
-    time: now.toLocaleString(),
+    time: now.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }),
     date: now.toLocaleDateString(),
-    bot_id: getBotId(target.platform, target.botId),
-    bot_platform: target.platform,
-    bot_self_id: target.botId,
     target_id: target.id,
-    target_type: target.type,
-    group_id: target.type === 'guild' ? target.id : '',
-    private_id: target.type === 'private' ? target.id : '',
+    target_name: await getTargetName(bot, target),
   }
+}
+
+async function getTargetName(bot: Bot, target: BroadcastTargetConfig) {
+  if (target.type === 'guild') {
+    try {
+      return (await bot.getGuild(target.id))?.name || target.id
+    } catch {
+      return target.id
+    }
+  }
+
+  const anyBot = bot as any
+
+  if (typeof anyBot.getUser === 'function') {
+    try {
+      const user = await anyBot.getUser(target.id)
+      return user?.nick || user?.name || user?.username || target.id
+    } catch {
+      return target.id
+    }
+  }
+
+  return target.id
 }

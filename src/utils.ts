@@ -12,7 +12,3 @@ export function computeDelayMs(baseDelaySeconds: number, jitterPercent: number) 
   const factor = minFactor + Math.random() * (maxFactor - minFactor)
   return Math.round(baseMs * factor)
 }
-
-export function getBotId(platform?: string, selfId?: string) {
-  return `${platform ?? ''}:${selfId ?? ''}`
-}

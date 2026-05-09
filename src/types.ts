@@ -29,11 +29,6 @@ export interface Config {
 export interface TemplateContext {
   time: string
   date: string
-  bot_id: string
-  bot_platform: string
-  bot_self_id: string
   target_id: string
-  target_type: string
-  group_id: string
-  private_id: string
+  target_name: string
 }

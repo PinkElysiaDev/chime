@@ -63,15 +63,10 @@
 
 | 变量 | 说明 |
 |------|------|
-| `{time}` | 当前完整日期时间 |
+| `{time}` | 当前时间，仅包含小时和分钟，例如 `21:16` |
 | `{date}` | 当前日期 |
-| `{bot_id}` | Bot 标识（platform:selfId） |
-| `{bot_platform}` | Bot 平台名称 |
-| `{bot_self_id}` | Bot 账号 ID |
-| `{target_id}` | 当前发送目标 ID |
-| `{target_type}` | 当前发送目标类型，值为 `guild` 或 `private` |
-| `{group_id}` | 当前群聊目标 ID，仅群聊目标时有值；用于兼容旧模板 |
-| `{private_id}` | 当前私聊目标 ID，仅私聊目标时有值 |
+| `{target_id}` | 当前发送目标 ID，群聊时为群 ID，私聊时为用户 ID |
+| `{target_name}` | 当前发送目标名称，群聊时为群名，私聊时为用户昵称/用户名；获取失败时回退为 `{target_id}` |
 
 ## 标签支持
 

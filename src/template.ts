@@ -12,13 +12,8 @@ function replaceVariables(template: string, context: TemplateContext): string {
   const replacements: Record<keyof TemplateContext, string> = {
     time: context.time ?? '',
     date: context.date ?? '',
-    bot_id: context.bot_id ?? '',
-    bot_platform: context.bot_platform ?? '',
-    bot_self_id: context.bot_self_id ?? '',
     target_id: context.target_id ?? '',
-    target_type: context.target_type ?? '',
-    group_id: context.group_id ?? '',
-    private_id: context.private_id ?? '',
+    target_name: context.target_name ?? '',
   }
 
   let output = template

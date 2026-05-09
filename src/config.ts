@@ -29,10 +29,10 @@ const antiBanSchema: Schema<AntiBanConfig> = Schema.object({
 const broadcastTargetSchema: Schema<BroadcastTargetConfig> = Schema.object({
   platform: Schema.string()
     .required()
-    .description('Bot 平台名称，例如 onebot'),
+    .description('平台名称'),
   botId: Schema.string()
     .required()
-    .description('Bot 账号 ID'),
+    .description('Bot ID'),
   type: Schema.union([
     Schema.const('guild' as const).description('群聊'),
     Schema.const('private' as const).description('私聊'),
@@ -64,7 +64,7 @@ const broadcastSchema: Schema<BroadcastConfig> = Schema.object({
     .role('textarea')
     .default(DEFAULT_TEMPLATE)
     .description(
-      '消息模板，支持变量：{time} {date} {bot_id} {bot_platform} {bot_self_id} {target_id} {target_type} {group_id} {private_id}，支持 <at id="..."></at> 标签',
+      '消息模板，支持变量：{time} {date} {target_id} {target_name}，支持 <at id="..."></at> 标签',
     ),
 })
 
