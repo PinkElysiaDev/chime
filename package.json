@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-chime",
-  "description": "A\u0016 \u0016plugin",
-  "version": "0.0.1",
+  "description": "定时广播消息插件，支持多 Bot、多目标、变量模板和 anti-ban 延迟",
+  "version": "0.1.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -9,14 +9,16 @@
     "dist"
   ],
   "license": "MIT",
-  "scripts": {},
   "keywords": [
     "chatbot",
     "koishi",
-    "plugin"
+    "plugin",
+    "broadcast",
+    "cron",
+    "scheduled"
   ],
-  "devDependencies": {},
   "peerDependencies": {
-    "koishi": "^4.18.7"
+    "koishi": "^4.18.7",
+    "koishi-plugin-cron": "^1.0.0"
   }
 }
