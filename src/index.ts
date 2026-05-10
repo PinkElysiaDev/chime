@@ -28,6 +28,8 @@ export const usage = `
 - \`{date}\` - 当前日期
 - \`{target_id}\` - 当前发送目标 ID，群聊时为群 ID，私聊时为用户 ID
 - \`{target_name}\` - 当前发送目标名称，群聊时为群名，私聊时为用户昵称/用户名
+- \`{imageURL="..."}\` - 插入图片，支持本地路径、file URL、http(s) URL
+- \`{fileURL="..."}\` - 插入文件，支持本地路径、file URL、http(s) URL
 - \`<at id="123456789"></at>\` - @ 指定用户
 
 ## Cron 表达式示例
@@ -129,7 +131,10 @@ export function apply(ctx: Context, config: ChimeConfig) {
       }
 
       const templateContext = await buildTemplateContext(bot, now, target)
-      const message = renderTemplate(broadcast.template, templateContext)
+      const message = await renderTemplate(broadcast.template, templateContext, {
+        allowLocalResources: config.resource.allowLocalResources,
+        logger,
+      })
 
       verboseLog(
         `[template] broadcast=${broadcastName}, bot=${botKey}, type=${target.type}, id=${target.id}, rendered segments=${message.length}`,

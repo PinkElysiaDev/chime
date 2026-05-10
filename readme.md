@@ -11,7 +11,7 @@
 - 同时支持群聊发送和私聊发送
 - 使用 table 配置广播发送范围：`platform` / `botId` / `type` / `id`
 - 支持多目标串行发送
-- 消息模板支持变量替换和 `<at>` 标签
+- 消息模板支持变量替换、`<at>` 标签、图片资源和文件资源
 - Anti-ban 机制：固定间隔 + 随机抖动，避免平台风控
 
 ## 依赖
@@ -51,6 +51,12 @@
 | onebot | 123456 | private | 20001 |
 | onebot | 654321 | guild | 10002 |
 
+### 资源配置
+
+| 字段 | 说明 |
+|------|------|
+| `allowLocalResources` | 是否允许模板通过 `{imageURL="..."}` / `{fileURL="..."}` 读取并发送本地资源文件 |
+
 ### Anti-Ban 配置
 
 | 字段 | 说明 |
@@ -61,12 +67,42 @@
 
 ## 模板变量
 
+### 文本变量
+
 | 变量 | 说明 |
 |------|------|
 | `{time}` | 当前时间，仅包含小时和分钟，例如 `21:16` |
 | `{date}` | 当前日期 |
 | `{target_id}` | 当前发送目标 ID，群聊时为群 ID，私聊时为用户 ID |
 | `{target_name}` | 当前发送目标名称，群聊时为群名，私聊时为用户昵称/用户名；获取失败时回退为 `{target_id}` |
+
+### 资源变量
+
+| 变量 | 说明 |
+|------|------|
+| `{imageURL="..."}` | 插入图片，支持本地路径、`file://` URL、`http(s)` URL |
+| `{fileURL="..."}` | 插入文件，支持本地路径、`file://` URL、`http(s)` URL |
+
+示例：
+
+```text
+现在是 {time}
+发送目标：{target_name}
+
+{imageURL="./data/images/morning.jpg"}
+
+今日文件：
+{fileURL="./data/files/report.pdf"}
+```
+
+也支持远程 URL：
+
+```text
+{imageURL="https://example.com/image.png"}
+{fileURL="https://example.com/report.pdf"}
+```
+
+本地相对路径会基于 Koishi 当前工作目录解析。若本地文件不存在或本地资源读取被禁用，插件会记录 warn 日志，并在消息中插入加载失败提示文本。
 
 ## 标签支持
 

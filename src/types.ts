@@ -4,6 +4,10 @@ export interface AntiBanConfig {
   jitterPercent: number
 }
 
+export interface ResourceConfig {
+  allowLocalResources: boolean
+}
+
 export interface BroadcastTargetConfig {
   platform: string
   botId: string
@@ -21,6 +25,7 @@ export interface BroadcastConfig {
 
 export interface Config {
   antiBan: AntiBanConfig
+  resource: ResourceConfig
   debug: boolean
   verboseLogging: boolean
   broadcasts: BroadcastConfig[]

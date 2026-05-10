@@ -4,9 +4,18 @@ import type {
   BroadcastConfig,
   BroadcastTargetConfig,
   Config as ChimeConfig,
+  ResourceConfig,
 } from './types'
 
 const DEFAULT_TEMPLATE = `大家好！现在是 {time}，这是一条定时广播消息。`
+
+const resourceSchema: Schema<ResourceConfig> = Schema.object({
+  allowLocalResources: Schema.boolean()
+    .default(true)
+    .description(
+      '允许模板通过 {imageURL="..."} / {fileURL="..."} 读取并发送本地资源文件',
+    ),
+})
 
 const antiBanSchema: Schema<AntiBanConfig> = Schema.object({
   enabled: Schema.boolean()
@@ -64,13 +73,14 @@ const broadcastSchema: Schema<BroadcastConfig> = Schema.object({
     .role('textarea')
     .default(DEFAULT_TEMPLATE)
     .description(
-      '消息模板，支持变量：{time} {date} {target_id} {target_name}，支持 <at id="..."></at> 标签',
+      '消息模板，支持变量：{time} {date} {target_id} {target_name} {imageURL="..."} {fileURL="..."}，支持 <at id="..."></at> 标签',
     ),
 })
 
 export const ConfigSchema: Schema<ChimeConfig> = Schema.intersect([
   Schema.object({
     antiBan: antiBanSchema,
+    resource: resourceSchema,
     debug: Schema.boolean()
       .default(false)
       .description('启用调试日志'),
