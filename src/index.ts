@@ -38,6 +38,11 @@ export const usage = `
 - \`0 12 * * 1-5\` - 工作日中午 12:00
 - \`0 9 1 * *\` - 每月 1 日 9:00
 - \`*/30 * * * *\` - 每 30 分钟
+
+## 更新日志 v0.1.2 & v0.1.3
+
+- 新增了发送图片及文件的功能，支持本地 url 和 http url
+- 修复了 cron 版本不兼容的 bug
 `
 
 export function apply(ctx: Context, config: ChimeConfig) {

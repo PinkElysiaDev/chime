@@ -13,7 +13,7 @@ const resourceSchema: Schema<ResourceConfig> = Schema.object({
   allowLocalResources: Schema.boolean()
     .default(true)
     .description(
-      '允许模板通过 {imageURL="..."} / {fileURL="..."} 读取并发送本地资源文件',
+      '开启后将启用变量 {imageURL="..."} / {fileURL="..."} ，允许读取并发送图片及文件',
     ),
 })
 
@@ -73,7 +73,7 @@ const broadcastSchema: Schema<BroadcastConfig> = Schema.object({
     .role('textarea')
     .default(DEFAULT_TEMPLATE)
     .description(
-      '消息模板，支持变量：{time} {date} {target_id} {target_name} {imageURL="..."} {fileURL="..."}，支持 <at id="..."></at> 标签',
+      '消息模板，支持变量：{time} {date} {target_id} {target_name} {imageURL="..."} {fileURL="..."}',
     ),
 })
 
