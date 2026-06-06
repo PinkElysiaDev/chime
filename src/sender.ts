@@ -8,6 +8,7 @@ interface SenderOptions {
   debug?: boolean
   verboseLogging?: boolean
   broadcastName?: string
+  taskId?: string
 }
 
 export interface PreparedBroadcastTarget {
@@ -21,6 +22,7 @@ export async function sendToTargets(
   options: SenderOptions,
 ) {
   const broadcastName = options.broadcastName || '(unnamed)'
+  const taskLabel = options.taskId ? `task=${options.taskId}, ` : ''
 
   for (let index = 0; index < targets.length; index++) {
     const item = targets[index]
@@ -28,7 +30,7 @@ export async function sendToTargets(
 
     if (options.verboseLogging) {
       options.logger.info(
-        `[sender] broadcast=${broadcastName}, target ${index + 1}/${targets.length}, bot=${target.platform}:${target.botId}, type=${target.type}, id=${target.id}`,
+        `[sender] ${taskLabel}broadcast=${broadcastName}, target ${index + 1}/${targets.length}, bot=${target.platform}:${target.botId}, type=${target.type}, id=${target.id}`,
       )
     }
 
@@ -41,7 +43,7 @@ export async function sendToTargets(
       if (delayMs > 0) {
         if (options.verboseLogging) {
           options.logger.info(
-            `[sender] broadcast=${broadcastName}, waiting ${delayMs}ms before sending to ${target.type}:${target.id}`,
+            `[sender] ${taskLabel}broadcast=${broadcastName}, waiting ${delayMs}ms before sending to ${target.type}:${target.id}`,
           )
         }
         await sleep(delayMs)
@@ -52,12 +54,13 @@ export async function sendToTargets(
       const sendPath = await sendSingleTarget(bot, target, message, options)
       if (options.debug || options.verboseLogging) {
         options.logger.info(
-          `[sender] broadcast=${broadcastName}, sent to ${target.type}:${target.id}, bot=${target.platform}:${target.botId}, path=${sendPath}`,
+          `[sender] ${taskLabel}broadcast=${broadcastName}, sent to ${target.type}:${target.id}, bot=${target.platform}:${target.botId}, path=${sendPath}`,
         )
       }
     } catch (error) {
+      const errorMessage = formatError(error, options.debug)
       options.logger.warn(
-        `[sender] broadcast=${broadcastName}, failed to send to ${target.type}:${target.id}, bot=${target.platform}:${target.botId}: ${error instanceof Error ? error.stack || error.message : String(error)}`,
+        `[sender] ${taskLabel}broadcast=${broadcastName}, failed to send to ${target.type}:${target.id}, bot=${target.platform}:${target.botId}: ${errorMessage}`,
       )
     }
   }
@@ -70,11 +73,12 @@ async function sendSingleTarget(
   options: SenderOptions,
 ) {
   const broadcastName = options.broadcastName || '(unnamed)'
+  const taskLabel = options.taskId ? `task=${options.taskId}, ` : ''
 
   if (target.type === 'guild') {
     if (options.verboseLogging) {
       options.logger.info(
-        `[sender] broadcast=${broadcastName}, path=guild-sendMessage, target=${target.id}`,
+        `[sender] ${taskLabel}broadcast=${broadcastName}, path=guild-sendMessage, target=${target.id}`,
       )
     }
     await bot.sendMessage(target.id, message)
@@ -86,7 +90,7 @@ async function sendSingleTarget(
   if (typeof anyBot.sendPrivateMessage === 'function') {
     if (options.verboseLogging) {
       options.logger.info(
-        `[sender] broadcast=${broadcastName}, path=sendPrivateMessage, target=${target.id}`,
+        `[sender] ${taskLabel}broadcast=${broadcastName}, path=sendPrivateMessage, target=${target.id}`,
       )
     }
     await anyBot.sendPrivateMessage(target.id, message)
@@ -96,7 +100,7 @@ async function sendSingleTarget(
   if (typeof anyBot.createDirectChannel === 'function') {
     if (options.verboseLogging) {
       options.logger.info(
-        `[sender] broadcast=${broadcastName}, path=createDirectChannel, target=${target.id}`,
+        `[sender] ${taskLabel}broadcast=${broadcastName}, path=createDirectChannel, target=${target.id}`,
       )
     }
     const channel = await anyBot.createDirectChannel(target.id)
@@ -112,7 +116,7 @@ async function sendSingleTarget(
   if (typeof anyBot.getDmChannel === 'function') {
     if (options.verboseLogging) {
       options.logger.info(
-        `[sender] broadcast=${broadcastName}, path=getDmChannel, target=${target.id}`,
+        `[sender] ${taskLabel}broadcast=${broadcastName}, path=getDmChannel, target=${target.id}`,
       )
     }
     const channel = await anyBot.getDmChannel(target.id)
@@ -126,4 +130,12 @@ async function sendSingleTarget(
   }
 
   throw new Error('private message is not supported by current adapter')
+}
+
+function formatError(error: unknown, includeStack?: boolean) {
+  if (error instanceof Error) {
+    return includeStack ? error.stack || error.message : error.message
+  }
+
+  return String(error)
 }

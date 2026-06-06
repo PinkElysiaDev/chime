@@ -39,11 +39,17 @@ export const usage = `
 - \`0 9 1 * *\` - 每月 1 日 9:00
 - \`*/30 * * * *\` - 每 30 分钟
 
-## 更新日志 v0.1.2 & v0.1.3
+## 更新日志 v0.1.4
 
-- 新增了发送图片及文件的功能，支持本地 url 和 http url
-- 修复了 cron 版本不兼容的 bug
+- 为定时任务添加唯一 ID ，避免对单一任务注册大量 cron 任务。
 `
+
+interface RegisteredTask {
+  dispose: () => void
+}
+
+const registeredTasks = new Map<string, RegisteredTask>()
+const runningTasks = new Set<string>()
 
 export function apply(ctx: Context, config: ChimeConfig) {
   const logger = ctx.logger(name)
@@ -66,8 +72,9 @@ export function apply(ctx: Context, config: ChimeConfig) {
     `plugin loaded, ${enabledBroadcasts.length}/${config.broadcasts.length} broadcasts enabled`,
   )
 
-  for (const broadcast of enabledBroadcasts) {
+  for (const [broadcastIndex, broadcast] of enabledBroadcasts.entries()) {
     const broadcastName = broadcast.name || '(unnamed)'
+    const taskId = createTaskId(broadcast, broadcastIndex)
 
     if (!broadcast.cronExpression.trim()) {
       logger.warn(`[${broadcastName}] skipped, cron expression is empty`)
@@ -85,17 +92,33 @@ export function apply(ctx: Context, config: ChimeConfig) {
     }
 
     verboseLog(
-      `[register] broadcast=${broadcastName}, cron=${broadcast.cronExpression}, targets=${broadcast.targets.length}`,
+      `[register] task=${taskId}, broadcast=${broadcastName}, cron=${broadcast.cronExpression}, targets=${broadcast.targets.length}`,
     )
 
     try {
-      ctx.cron(broadcast.cronExpression, async () => {
-        await executeBroadcast(config, broadcast)
+      const previousTask = registeredTasks.get(taskId)
+      if (previousTask) {
+        logger.warn(
+          `[register] task=${taskId}, duplicate taskId detected, disposing previous cron task`,
+        )
+        previousTask.dispose()
+      }
+
+      const dispose = ctx.cron(broadcast.cronExpression, async () => {
+        await executeBroadcast(config, broadcast, taskId)
       })
-      debugLog(`[register] broadcast=${broadcastName} registered successfully`)
+
+      registeredTasks.set(taskId, { dispose })
+      ctx.on('dispose', () => {
+        if (registeredTasks.get(taskId)?.dispose === dispose) {
+          registeredTasks.delete(taskId)
+        }
+      })
+
+      debugLog(`[register] task=${taskId}, broadcast=${broadcastName} registered successfully`)
     } catch (error) {
       logger.warn(
-        `[register] failed to register broadcast=${broadcastName}: ${error instanceof Error ? error.message : String(error)}`,
+        `[register] task=${taskId}, failed to register broadcast=${broadcastName}: ${error instanceof Error ? error.message : String(error)}`,
       )
     }
   }
@@ -103,70 +126,121 @@ export function apply(ctx: Context, config: ChimeConfig) {
   async function executeBroadcast(
     config: ChimeConfig,
     broadcast: BroadcastConfig,
+    taskId: string,
   ) {
     const broadcastName = broadcast.name || '(unnamed)'
     const preparedTargets: PreparedBroadcastTarget[] = []
     const now = new Date()
 
-    verboseLog(
-      `[trigger] broadcast=${broadcastName}, preparing ${broadcast.targets.length} targets`,
-    )
-
-    for (const target of broadcast.targets) {
-      const botKey = `${target.platform}:${target.botId}`
-
-      if (!target.id.trim()) {
-        logger.warn(
-          `[trigger] broadcast=${broadcastName}, skipped empty target id, bot=${botKey}, type=${target.type}`,
-        )
-        continue
-      }
-
-      verboseLog(
-        `[trigger] broadcast=${broadcastName}, looking for bot=${botKey}, type=${target.type}, id=${target.id}`,
+    if (runningTasks.has(taskId)) {
+      logger.warn(
+        `[trigger] task=${taskId}, broadcast=${broadcastName}, skipped because previous run is still active`,
       )
-
-      const bot = ctx.bots[botKey]
-
-      if (!bot) {
-        logger.warn(
-          `[trigger] broadcast=${broadcastName}, bot ${botKey} not found or offline`,
-        )
-        continue
-      }
-
-      const templateContext = await buildTemplateContext(bot, now, target)
-      const message = await renderTemplate(broadcast.template, templateContext, {
-        allowLocalResources: config.resource.allowLocalResources,
-        logger,
-      })
-
-      verboseLog(
-        `[template] broadcast=${broadcastName}, bot=${botKey}, type=${target.type}, id=${target.id}, rendered segments=${message.length}`,
-      )
-
-      preparedTargets.push({
-        bot,
-        target,
-        message,
-      })
-    }
-
-    if (!preparedTargets.length) {
-      logger.warn(`[trigger] broadcast=${broadcastName}, no valid targets to send`)
       return
     }
 
-    await sendToTargets(preparedTargets, {
-      antiBan: config.antiBan,
-      logger,
-      debug: config.debug,
-      verboseLogging: config.verboseLogging,
-      broadcastName,
-    })
+    runningTasks.add(taskId)
 
-    debugLog(`[done] broadcast=${broadcastName} completed`)
+    try {
+      verboseLog(
+        `[trigger] task=${taskId}, broadcast=${broadcastName}, preparing ${broadcast.targets.length} targets`,
+      )
+
+      for (const target of broadcast.targets) {
+        const botKey = `${target.platform}:${target.botId}`
+
+        if (!target.id.trim()) {
+          logger.warn(
+            `[trigger] task=${taskId}, broadcast=${broadcastName}, skipped empty target id, bot=${botKey}, type=${target.type}`,
+          )
+          continue
+        }
+
+        verboseLog(
+          `[trigger] task=${taskId}, broadcast=${broadcastName}, looking for bot=${botKey}, type=${target.type}, id=${target.id}`,
+        )
+
+        const bot = ctx.bots[botKey]
+
+        if (!bot) {
+          logger.warn(
+            `[trigger] task=${taskId}, broadcast=${broadcastName}, bot ${botKey} not found or offline`,
+          )
+          continue
+        }
+
+        const templateContext = await buildTemplateContext(bot, now, target)
+        const message = await renderTemplate(broadcast.template, templateContext, {
+          allowLocalResources: config.resource.allowLocalResources,
+          logger,
+        })
+
+        verboseLog(
+          `[template] task=${taskId}, broadcast=${broadcastName}, bot=${botKey}, type=${target.type}, id=${target.id}, rendered segments=${message.length}`,
+        )
+
+        preparedTargets.push({
+          bot,
+          target,
+          message,
+        })
+      }
+
+      if (!preparedTargets.length) {
+        logger.warn(`[trigger] task=${taskId}, broadcast=${broadcastName}, no valid targets to send`)
+        return
+      }
+
+      await sendToTargets(preparedTargets, {
+        antiBan: config.antiBan,
+        logger,
+        debug: config.debug,
+        verboseLogging: config.verboseLogging,
+        broadcastName,
+        taskId,
+      })
+
+      debugLog(`[done] task=${taskId}, broadcast=${broadcastName} completed`)
+    } finally {
+      runningTasks.delete(taskId)
+    }
   }
+}
+
+function createTaskId(broadcast: BroadcastConfig, index: number) {
+  const broadcastName = sanitizeTaskPart(broadcast.name || 'unnamed')
+  const cronSlug = sanitizeCronPart(broadcast.cronExpression)
+  const targetsHash = hashTargets(broadcast.targets)
+
+  return `${name}:${broadcastName}#${index}:${cronSlug}:t${targetsHash}`
+}
+
+function sanitizeTaskPart(value: string) {
+  return value
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[,:#]/g, '-') || 'unnamed'
+}
+
+function sanitizeCronPart(value: string) {
+  return value
+    .trim()
+    .replace(/\*/g, 'star')
+    .replace(/\s+/g, '_') || 'empty'
+}
+
+function hashTargets(targets: BroadcastTargetConfig[]) {
+  const source = targets
+    .map((target) => `${target.platform}:${target.botId}:${target.type}:${target.id}`)
+    .join('|')
+  let hash = 0x811c9dc5
+
+  for (let index = 0; index < source.length; index++) {
+    hash ^= source.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+
+  return (hash >>> 0).toString(36).slice(0, 6).padStart(6, '0')
 }
 
 async function buildTemplateContext(
