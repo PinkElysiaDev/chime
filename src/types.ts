@@ -8,6 +8,10 @@ export interface ResourceConfig {
   allowLocalResources: boolean
 }
 
+export interface SafetyConfig {
+  minTriggerIntervalSeconds: number
+}
+
 export interface BroadcastTargetConfig {
   platform: string
   botId: string
@@ -18,7 +22,7 @@ export interface BroadcastTargetConfig {
 export interface BroadcastConfig {
   enabled: boolean
   name: string
-  cronExpression: string
+  cron?: string
   targets: BroadcastTargetConfig[]
   template: string
 }
@@ -26,6 +30,7 @@ export interface BroadcastConfig {
 export interface Config {
   antiBan: AntiBanConfig
   resource: ResourceConfig
+  safety: SafetyConfig
   debug: boolean
   verboseLogging: boolean
   broadcasts: BroadcastConfig[]
