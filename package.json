@@ -32,5 +32,8 @@
       "en": "A scheduled message plugin that supports different broadcast timing strategies for different groups and is natively compatible with multi-bot-controller.",
       "zh": "一款用于定时发送消息的广播插件，支持五位 cron 表达式安全调度、多目标发送和资源模板。"
     }
+  },
+  "dependencies": {
+    "cron-parser": "^4.9.0"
   }
 }

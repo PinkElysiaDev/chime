@@ -62,7 +62,7 @@ const broadcastTargetSchema: Schema<BroadcastTargetConfig> = Schema.object({
 })
 
 const cronSchema = Schema.string()
-  .description('五位 cron 表达式：分钟 小时 日期 月份 星期。例如：0 12 6 6 *。')
+  .description('五位或六位 cron 表达式。五位格式：分钟 小时 日期 月份 星期，例如 0 12 6 6 *；六位格式：秒 分钟 小时 日期 月份 星期，例如 30 0 12 6 6 *。')
 
 
 const broadcastSchema: Schema<BroadcastConfig> = Schema.object({

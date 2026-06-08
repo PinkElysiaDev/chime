@@ -1,3 +1,4 @@
+import { parseExpression } from 'cron-parser'
 import { Bot, Context } from 'koishi'
 import { Config, name } from './config'
 import type {
@@ -42,11 +43,6 @@ export const usage = `
 
 interface RegisteredTask {
   dispose: () => void
-}
-
-interface ScheduledTask {
-  dispose: () => void
-  nextRunAt: Date
 }
 
 const MAX_SAFE_DELAY_MS = 24 * 60 * 60 * 1000
@@ -141,59 +137,32 @@ export function apply(ctx: Context, config: ChimeConfig) {
     }
   }
 
-  function scheduleBroadcast(
-    config: ChimeConfig,
-    broadcast: BroadcastConfig,
-    taskId: string,
-  ): ScheduledTask | undefined {
+  function scheduleBroadcast(config: ChimeConfig, broadcast: BroadcastConfig, taskId: string) {
     const broadcastName = broadcast.name || '(unnamed)'
-    let disposed = false
-    let disposeTimer: (() => void) | undefined
 
-    const scheduleNext = (initial = false): Date | undefined => {
-      if (disposed || !broadcast.cron) return
-
-      const nextRunAt = getNextCronRunAt(broadcast.cron, new Date())
-      if (!nextRunAt) {
+    return createSafeCronTask(broadcast.cron!, async () => {
+      try {
+        await executeBroadcast(config, broadcast, taskId)
+      } catch (error) {
         logger.warn(
-          `[schedule] task=${taskId}, broadcast=${broadcastName}, no valid future run found for cron=${formatCronExpression(broadcast.cron)}`,
+          `[trigger] task=${taskId}, broadcast=${broadcastName}, failed: ${formatError(error)}`,
         )
-        return
       }
-
-      disposeTimer = scheduleAt(nextRunAt, async () => {
-        try {
-          await executeBroadcast(config, broadcast, taskId)
-        } catch (error) {
-          logger.warn(
-            `[trigger] task=${taskId}, broadcast=${broadcastName}, failed: ${formatError(error)}`,
+    }, {
+      onMissingNextRun: () => logger.warn(
+        `[schedule] task=${taskId}, broadcast=${broadcastName}, no valid future run found for cron=${formatCronExpression(broadcast.cron)}`,
+      ),
+      onInvalidCron: (error) => logger.warn(
+        `[schedule] task=${taskId}, broadcast=${broadcastName}, invalid cron=${formatCronExpression(broadcast.cron)}: ${formatError(error)}`,
+      ),
+      onNextRun: (nextRunAt, initial) => {
+        if (!initial) {
+          verboseLog(
+            `[schedule] task=${taskId}, broadcast=${broadcastName}, nextRunAt=${formatDateTime(nextRunAt)}`,
           )
-        } finally {
-          if (!disposed) {
-            scheduleNext()
-          }
         }
-      })
-
-      if (!initial) {
-        verboseLog(
-          `[schedule] task=${taskId}, broadcast=${broadcastName}, nextRunAt=${formatDateTime(nextRunAt)}`,
-        )
-      }
-
-      return nextRunAt
-    }
-
-    const nextRunAt = scheduleNext(true)
-    if (!nextRunAt) return
-
-    return {
-      nextRunAt,
-      dispose: () => {
-        disposed = true
-        disposeTimer?.()
       },
-    }
+    })
   }
 
   async function executeBroadcast(
@@ -301,150 +270,72 @@ export function apply(ctx: Context, config: ChimeConfig) {
   }
 }
 
-function scheduleAt(targetTime: Date, callback: () => Promise<void>) {
-  let timer: ReturnType<typeof setTimeout> | undefined
+function createSafeCronTask(
+  cron: string,
+  onTrigger: () => Promise<void>,
+  hooks: {
+    onMissingNextRun?: () => void
+    onInvalidCron?: (error: unknown) => void
+    onNextRun?: (nextRunAt: Date, initial: boolean) => void
+  } = {},
+) {
   let disposed = false
+  let timer: ReturnType<typeof setTimeout> | undefined
 
-  const tick = () => {
+  const scheduleNext = (initial = false): Date | undefined => {
+    if (disposed) return
+
+    let nextRunAt: Date | undefined
+    try {
+      nextRunAt = getNextCronRunAt(cron)
+    } catch (error) {
+      hooks.onInvalidCron?.(error)
+      return
+    }
+
+    if (!nextRunAt) {
+      hooks.onMissingNextRun?.()
+      return
+    }
+
+    hooks.onNextRun?.(nextRunAt, initial)
+    waitUntil(nextRunAt)
+    return nextRunAt
+  }
+
+  const waitUntil = (targetTime: Date) => {
     if (disposed) return
 
     const remainingMs = targetTime.getTime() - Date.now()
     if (remainingMs <= 0) {
-      void callback()
+      void onTrigger().finally(() => scheduleNext())
       return
     }
 
-    timer = setTimeout(tick, Math.min(remainingMs, MAX_SAFE_DELAY_MS))
+    timer = setTimeout(() => waitUntil(targetTime), Math.min(remainingMs, MAX_SAFE_DELAY_MS))
   }
 
-  tick()
+  const nextRunAt = scheduleNext(true)
+  if (!nextRunAt) return
 
-  return () => {
-    disposed = true
-    if (timer) clearTimeout(timer)
-  }
-}
-
-interface ParsedCronField {
-  values: number[]
-  wildcard: boolean
-}
-
-interface ParsedCron {
-  minute: ParsedCronField
-  hour: ParsedCronField
-  dayOfMonth: ParsedCronField
-  month: ParsedCronField
-  dayOfWeek: ParsedCronField
-}
-
-function getNextCronRunAt(cron: string, now: Date) {
-  const parsed = parseCronExpression(cron)
-  const start = new Date(now.getTime() + 60 * 1000)
-  start.setSeconds(0, 0)
-
-  const deadline = new Date(now)
-  deadline.setFullYear(deadline.getFullYear() + 8)
-  deadline.setSeconds(59, 999)
-
-  for (const candidate = start; candidate <= deadline; candidate.setMinutes(candidate.getMinutes() + 1)) {
-    if (matchesCron(candidate, parsed)) return new Date(candidate)
+  return {
+    nextRunAt,
+    dispose: () => {
+      disposed = true
+      if (timer) clearTimeout(timer)
+    },
   }
 }
 
-function parseCronExpression(expression: string): ParsedCron {
+function getNextCronRunAt(cron: string) {
+  return parseExpression(normalizeCronExpression(cron)).next().toDate()
+}
+
+function normalizeCronExpression(expression: string) {
   const fields = expression.trim().split(/\s+/).filter(Boolean)
-  if (fields.length !== 5) {
-    throw new Error(`cron 表达式必须是 5 位：分钟 小时 日期 月份 星期，当前为 ${fields.length} 位`)
-  }
-
-  return {
-    minute: parseCronField(fields[0], 0, 59),
-    hour: parseCronField(fields[1], 0, 23),
-    dayOfMonth: parseCronField(fields[2], 1, 31),
-    month: parseCronField(fields[3], 1, 12),
-    dayOfWeek: parseCronField(fields[4], 0, 7, (value) => value === 7 ? 0 : value),
-  }
-}
-
-function parseCronField(
-  source: string,
-  min: number,
-  max: number,
-  normalize: (value: number) => number = (value) => value,
-): ParsedCronField {
-  const field = String(source).trim()
-  if (!field) throw new Error('cron field cannot be empty')
-
-  const values = new Set<number>()
-  const parts = field.split(',')
-  for (const part of parts) {
-    addCronPartValues(part.trim(), min, max, normalize, values)
-  }
-
-  if (!values.size) throw new Error(`cron field has no values: ${source}`)
-  return {
-    values: [...values].sort((left, right) => left - right),
-    wildcard: field === '*',
-  }
-}
-
-function addCronPartValues(
-  part: string,
-  min: number,
-  max: number,
-  normalize: (value: number) => number,
-  values: Set<number>,
-) {
-  const match = /^(\*|\d+|\d+-\d+)(?:\/(\d+))?$/.exec(part)
-  if (!match) throw new Error(`unsupported cron field syntax: ${part}`)
-
-  const step = match[2] ? Number(match[2]) : 1
-  if (!Number.isInteger(step) || step <= 0) throw new Error(`invalid cron step: ${part}`)
-
-  const base = match[1]
-  let start: number
-  let end: number
-
-  if (base === '*') {
-    start = min
-    end = max
-  } else if (base.includes('-')) {
-    const [rangeStart, rangeEnd] = base.split('-').map(Number)
-    assertCronValue(rangeStart, min, max, part)
-    assertCronValue(rangeEnd, min, max, part)
-    if (rangeStart > rangeEnd) throw new Error(`invalid cron range: ${part}`)
-    start = rangeStart
-    end = rangeEnd
-  } else {
-    start = Number(base)
-    assertCronValue(start, min, max, part)
-    end = start
-  }
-
-  for (let value = start; value <= end; value += step) {
-    values.add(normalize(value))
-  }
-}
-
-function assertCronValue(value: number, min: number, max: number, source: string) {
-  if (!Number.isInteger(value) || value < min || value > max) {
-    throw new Error(`cron value out of range: ${source}`)
-  }
-}
-
-function matchesCron(date: Date, cron: ParsedCron) {
-  if (!cron.minute.values.includes(date.getMinutes())) return false
-  if (!cron.hour.values.includes(date.getHours())) return false
-  if (!cron.month.values.includes(date.getMonth() + 1)) return false
-
-  const dayOfMonthMatches = cron.dayOfMonth.values.includes(date.getDate())
-  const dayOfWeekMatches = cron.dayOfWeek.values.includes(date.getDay())
-
-  if (cron.dayOfMonth.wildcard && cron.dayOfWeek.wildcard) return true
-  if (cron.dayOfMonth.wildcard) return dayOfWeekMatches
-  if (cron.dayOfWeek.wildcard) return dayOfMonthMatches
-  return dayOfMonthMatches || dayOfWeekMatches
+  if (fields.length === 5) return `0 ${fields.join(' ')}`
+  if (fields.length === 6) return fields.join(' ')
+  throw new Error(`cron 表达式必须是 5 位或 6 位，当前为 ${fields.length} 位`)
 }
 
 function createTaskId(broadcast: BroadcastConfig, index: number) {
@@ -535,4 +426,3 @@ async function getTargetName(bot: Bot, target: BroadcastTargetConfig) {
 
   return target.id
 }
-
