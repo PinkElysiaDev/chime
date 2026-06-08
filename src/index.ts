@@ -37,8 +37,8 @@ export const usage = `
 - {imageURL="..."}：插入图片，支持本地路径、file URL、http(s) URL。
 - {fileURL="..."}：插入文件，支持本地路径、file URL、http(s) URL。
 
-## 0.1.5 版本更新说明
-- 采用内置 cron 解析以避免官方插件的 bug 。
+## 0.1.6 版本更新说明
+- 优化对 cron 的调用方式以避免 bug 。
 `
 
 interface RegisteredTask {
