@@ -149,19 +149,12 @@ export function apply(ctx: Context, config: ChimeConfig) {
         )
       }
     }, {
-      onMissingNextRun: () => logger.warn(
-        `[schedule] task=${taskId}, broadcast=${broadcastName}, no valid future run found for cron=${formatCronExpression(broadcast.cron)}`,
+      label: `task=${taskId}, broadcast=${broadcastName}`,
+      cronLabel: formatCronExpression(broadcast.cron),
+      warn: (message) => logger.warn(`[schedule] ${message}`),
+      info: (nextRunAt) => verboseLog(
+        `[schedule] task=${taskId}, broadcast=${broadcastName}, nextRunAt=${formatDateTime(nextRunAt)}`,
       ),
-      onInvalidCron: (error) => logger.warn(
-        `[schedule] task=${taskId}, broadcast=${broadcastName}, invalid cron=${formatCronExpression(broadcast.cron)}: ${formatError(error)}`,
-      ),
-      onNextRun: (nextRunAt, initial) => {
-        if (!initial) {
-          verboseLog(
-            `[schedule] task=${taskId}, broadcast=${broadcastName}, nextRunAt=${formatDateTime(nextRunAt)}`,
-          )
-        }
-      },
     })
   }
 
@@ -274,10 +267,11 @@ function createSafeCronTask(
   cron: string,
   onTrigger: () => Promise<void>,
   hooks: {
-    onMissingNextRun?: () => void
-    onInvalidCron?: (error: unknown) => void
-    onNextRun?: (nextRunAt: Date, initial: boolean) => void
-  } = {},
+    label: string
+    cronLabel: string
+    warn: (message: string) => void
+    info?: (nextRunAt: Date) => void
+  },
 ) {
   let disposed = false
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -289,16 +283,16 @@ function createSafeCronTask(
     try {
       nextRunAt = getNextCronRunAt(cron)
     } catch (error) {
-      hooks.onInvalidCron?.(error)
+      hooks.warn(`${hooks.label}, invalid cron=${hooks.cronLabel}: ${formatError(error)}`)
       return
     }
 
     if (!nextRunAt) {
-      hooks.onMissingNextRun?.()
+      hooks.warn(`${hooks.label}, no valid future run found for cron=${hooks.cronLabel}`)
       return
     }
 
-    hooks.onNextRun?.(nextRunAt, initial)
+    if (!initial) hooks.info?.(nextRunAt)
     waitUntil(nextRunAt)
     return nextRunAt
   }
@@ -359,14 +353,8 @@ function formatCronExpression(cron?: string) {
 
 
 function formatDateTime(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hour = String(date.getHours()).padStart(2, '0')
-  const minute = String(date.getMinutes()).padStart(2, '0')
-  const second = String(date.getSeconds()).padStart(2, '0')
-
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 function formatError(error: unknown) {
